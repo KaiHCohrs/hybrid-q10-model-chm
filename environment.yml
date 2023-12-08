@@ -1,0 +1,26 @@
+name: hybrid-q10-model
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda
+  - jaxlib
+  - jax
+  - cuda-nvcc
+  - doubleml
+  - tqdm
+  - scikit-learn
+  - matplotlib
+  - econml
+  - ipykernel
+  - ipython
+  - pandas
+  - numpy
+  - optax
+#  - pip:
