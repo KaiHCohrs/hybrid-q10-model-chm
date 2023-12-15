@@ -39,13 +39,12 @@ import numpy as np
 import sys
 
 from sklearn.base import BaseEstimator, RegressorMixin
-from src.datasets.loaders import (
+from src.datasets.utility import (
     build_dataloaders,
     Dataset,
     get_mean_and_std,
     CustomBootstrapLoader,
 )
-from src.training.trainers import trainer_basic
 
 from .building_blocks import MLP, MLPDropout  # , RespirationModel
 

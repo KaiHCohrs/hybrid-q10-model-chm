@@ -15,46 +15,32 @@ import torch.nn as nn
 import torch
 import random as orandom
 import scipy.stats as stats
+from .preprocessing import prepare_data
+from .generate_data import synthetic_dataset
 
 data_dir = Path(__file__).parent.parent.parent.joinpath("data")
 
 
 def load_dataset(
-    filename,
-    normalize=True,
-    years=[2003, 2004, 2005, 2006, 2007],
+    site='AT-Neu',
+    option="syn",
     frac=0.2,
-    suffix="syn",
-    add_EX="None",
+    years=[2003, 2004, 2005, 2006, 2007],
     noise=0.2,
-    inputs=1,
-    TA_syn=None,
-    IV=False,
+    seed=33
 ):
-    data = pd.read_csv(data_dir / filename, index_col=1)
-    # data = pd.read_csv(data_dir / filename, index_col=0)
 
-    data.index = pd.to_datetime(data.index)
-    data["Date"] = data.index.date
-    data["Time"] = data.index.time
-    data["Year"] = data.index.year
-    data["doy"] = data.index.dayofyear
-    data["doy_sin"], data["doy_cos"] = make_cyclic(data["doy"])
-    hour_of_day = data.index.hour
-    minute_of_hour = data.index.minute
-    data["tod"] = hour_of_day * 2 + minute_of_hour // 30
-    data["tod_sin"], data["tod_cos"] = make_cyclic(data["tod"])
+    data = prepare_data(site)
+    if option == "syn":
+        data = synthetic_dataset(data, Q10=1.5)
+        data = impose_noise(data, "RECO_syn", noise)
 
     data = data.sort_index()
     data = data[data.Year.isin(years)]
 
-    # Add noise to RECO simulations
-    data = impose_noise(data, "RECO_syn", noise)
-    IV_label = None
-
     # Split into train & test datasets
     if frac > 0:
-        if suffix == "measured":
+        if option == "measured":
             data["NIGHT"] = 0
             data.loc[(data["SW_IN_POT"] == 0), "NIGHT"] = 1
             data = data[(data["NIGHT"] == 1)]
@@ -62,34 +48,22 @@ def load_dataset(
             data = data[(data["NEE"] > 0)]
 
         train, test = train_test_split(
-            data, test_size=frac, random_state=31, shuffle=True
+            data, test_size=frac, random_state=seed, shuffle=True
         )
         train["train_label"] = "Training set"
         test["train_label"] = "Test set"
 
         # Define target and explanatory variables
-        if suffix == "syn":
+        if option == "syn":
             var_RECO = "RECO_obs"
             var_RECO_GT = "RECO_syn"
             var_temp = "TA"
-            EV_label = ["SW_POT_sm", "SW_POT_sm_diff", add_EX]
-
-        elif suffix == "measured":
+            EV_label = ["SW_POT_sm", "SW_POT_sm_diff"]
+        elif option == "measured":
             var_RECO = "NEE"
             var_RECO_GT = "NEE"
             var_temp = "TA"
-            if inputs == 1:
-                EV_label = [
-                    "SW_POT_sm",
-                    "SW_POT_sm_diff",
-                ]  # ['doy_sin', 'doy_cos', 'VPD', 'SWC_1', 'SWC_2']
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "VPD"]
-        else:
-            var_RECO = f"RECO_{suffix}"
-            var_RECO_GT = f"RECO_{suffix}"
-            var_temp = "TA"
-            #'doy_sin', 'doy_cos'
-            EV_label = ["doy_sin", "doy_cos", "VPD", "SWC_1", "SWC_2"]
+            EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "VPD"]
 
         EV_train = train[EV_label].astype("float32")
         RECO_train = train[var_RECO].astype("float32")
@@ -103,45 +77,18 @@ def load_dataset(
 
         # Y_data Normalization
         RECO_max_abs = (onp.abs(RECO_train.values)).max()
-        if normalize:
-            RECO_train = RECO_train.values / RECO_max_abs
-            RECO_test = RECO_test.values / RECO_max_abs
-            RECO_train_GT = RECO_train_GT.values / RECO_max_abs
-            RECO_test_GT = RECO_test_GT.values / RECO_max_abs
-            EV_train, EV_test = standard_x(EV_train, EV_test)
-        else:
-            RECO_train = RECO_train.values
-            RECO_test = RECO_test.values
-            RECO_train_GT = RECO_train_GT.values
-            RECO_test_GT = RECO_test_GT.values
 
-            EV_train, EV_test = EV_train.values, EV_test.values
-            driver_train, driver_test = driver_train.values, driver_test.values
+        RECO_train = RECO_train.values
+        RECO_test = RECO_test.values
+        RECO_train_GT = RECO_train_GT.values
+        RECO_test_GT = RECO_test_GT.values
 
-        if IV_label:
-            IV_train = train[IV_label].astype("float32")
-            IV_test = test[IV_label].astype("float32")
-            if normalize:
-                IV_train, IV_test = standard_x(IV_train, IV_test)
-                IV_train, IV_test = IV_train.values, IV_test.values
-            else:
-                IV_train, IV_test = IV_train.values, IV_test.values
-            out = [
-                EV_train,
-                None,
-                RECO_train,
-                RECO_train_GT,
-                driver_train,
-                EV_test,
-                None,
-                RECO_test,
-                RECO_test_GT,
-                driver_test,
-                RECO_max_abs,
-            ]
-            return train, test, out
+        EV_train, EV_test = EV_train.values, EV_test.values
+        driver_train, driver_test = driver_train.values, driver_test.values
+        out = [EV_train, None, RECO_train, RECO_train_GT, driver_train, EV_test, None, RECO_test, RECO_test_GT, driver_test, RECO_max_abs]
+        return train, test, out
     else:
-        if suffix == "measured":
+        if option == "measured":
             data["NIGHT"] = 0
             data.loc[(data["SW_IN_POT"] == 0), "NIGHT"] = 1
             data = data[(data["NIGHT"] == 1)]
@@ -152,44 +99,16 @@ def load_dataset(
         train["train_label"] = "Training set"
 
         # Define target and explanatory variables
-        if suffix == "syn":
+        if option == "syn":
             var_RECO = "RECO_obs"
             var_RECO_GT = "RECO_syn"
             var_temp = "TA"
-            if add_EX == "None":
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff"]
-            elif IV:
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff"]
-                IV_label = [add_EX]
-            else:
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff", add_EX]
-        elif suffix == "measured":
+            EV_label = ["SW_POT_sm", "SW_POT_sm_diff"]
+        elif option == "measured":
             var_RECO = "NEE"
             var_RECO_GT = "NEE"
             var_temp = "TA"
-            if inputs == 1:
-                EV_label = [
-                    "SW_POT_sm",
-                    "SW_POT_sm_diff",
-                ]  # ['doy_sin', 'doy_cos', 'VPD', 'SWC_1', 'SWC_2']
-            elif inputs == 2:
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "SWC_1"]
-            elif inputs == 3:
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "SWC_1", "SWC_2"]
-            elif inputs == 4:
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "SWC_1", "SWC_2", "VPD"]
-            elif inputs == 5:
-                EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "VPD"]
-        else:
-            var_RECO = f"RECO_{suffix}"
-            var_RECO_GT = f"RECO_{suffix}"
-            var_temp = "TA"
-            EV_label = ["doy_sin", "doy_cos", "VPD", "SWC_1", "SWC_2"]
-            # EV_label = ['SW_POT_sm', 'SW_POT_sm_diff','SWC_1', 'SWC_2']
-
-        # var_RECO = 'Respiration_heterotrophic'
-        # var_temp = 'T'
-        # EV_label = ['Moist', 'Rgpot', 'doy_sin', 'doy_cos']
+            EV_label = ["SW_POT_sm", "SW_POT_sm_diff", "VPD"]
 
         EV_train = train[EV_label].astype("float32")
         RECO_train = train[var_RECO].astype("float32")
@@ -198,43 +117,18 @@ def load_dataset(
 
         # Y_data Normalization
         RECO_max_abs = (onp.abs(RECO_train.values)).max()
-        if normalize:
-            RECO_train = RECO_train.values / RECO_max_abs
-            RECO_train_GT = RECO_train_GT.values / RECO_max_abs
-            EV_train = standard_x(EV_train)
-        else:
-            RECO_train = RECO_train.values
-            RECO_train_GT = RECO_train_GT.values
-            EV_train = EV_train.values
-            driver_train = driver_train.values
-        if IV_label:
-            IV_train = train[IV_label].astype("float32")
-            if normalize:
-                IV_train = standard_x(IV_train)
-            else:
-                IV_train = IV_train.values
-        if IV:
-            out = [
-                EV_train,
-                IV_train,
-                RECO_train,
-                RECO_train_GT,
-                driver_train,
-                RECO_max_abs,
-                data["Year"],
-            ]
-            return train, out
-        else:
-            out = [
-                EV_train,
-                None,
-                RECO_train,
-                RECO_train_GT,
-                driver_train,
-                RECO_max_abs,
-                data["Year"],
-            ]
-            return train, out
+        RECO_train = RECO_train.values
+        RECO_train_GT = RECO_train_GT.values
+        EV_train = EV_train.values
+        driver_train = driver_train.values
+    out = [
+        EV_train,
+        RECO_train,
+        RECO_train_GT,
+        driver_train,
+        RECO_max_abs,
+    ]
+    return train, out
 
 
 def make_cyclic(x):
