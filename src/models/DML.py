@@ -1,12 +1,7 @@
 import sys
 import os
-import itertools
-from functools import partial
-from pathlib import Path
 
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 import random as orandom
 
 import doubleml as dml
@@ -16,30 +11,7 @@ from sklearn.ensemble import (
     GradientBoostingRegressor,
     StackingRegressor,
 )
-
-from sklearn.neural_network import MLPRegressor
-from sklearn.svm import SVR, LinearSVR
-from sklearn.linear_model import SGDRegressor, LinearRegression
-from xgboost import XGBRegressor
-
-import jax
-from jax import grad, vmap, random, jit
-from jax import numpy as jnp
-from jax.example_libraries import optimizers
-from jax.example_libraries.optimizers import optimizer, make_schedule, l2_norm
-from jax.lax import cond
-
-from tqdm import trange
-import optax
-
-import torch.nn as nn
-import torch
-import torch.nn.functional as torchf
-import numpy as np
-import sys
-
 from src.models.NN_regressor import EnsembleCustomJNN
-
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7

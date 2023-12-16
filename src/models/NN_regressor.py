@@ -1,52 +1,22 @@
-import sys
 import os
 import itertools
 from functools import partial
-from pathlib import Path
 
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import random as orandom
-
-import doubleml as dml
-from sklearn.metrics import r2_score, mean_squared_error
-from sklearn.ensemble import (
-    RandomForestRegressor,
-    GradientBoostingRegressor,
-    StackingRegressor,
-)
-
-from sklearn.neural_network import MLPRegressor
-from sklearn.svm import SVR, LinearSVR
-from sklearn.linear_model import SGDRegressor, LinearRegression
-from xgboost import XGBRegressor
+from sklearn.metrics import mean_squared_error
 
 import jax
-from jax import grad, vmap, random, jit
+from jax import vmap, random, jit
 from jax import numpy as jnp
-from jax.example_libraries import optimizers
-from jax.example_libraries.optimizers import optimizer, make_schedule, l2_norm
-from jax.lax import cond
-
 from tqdm import trange
 import optax
 
-import torch.nn as nn
-import torch
-import torch.nn.functional as torchf
-import numpy as np
-import sys
 
 from sklearn.base import BaseEstimator, RegressorMixin
 from src.datasets.utility import (
-    build_dataloaders,
-    Dataset,
-    get_mean_and_std,
     CustomBootstrapLoader,
 )
 
-from .building_blocks import MLP, MLPDropout  # , RespirationModel
+from .building_blocks import MLPDropout  # , RespirationModel
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7

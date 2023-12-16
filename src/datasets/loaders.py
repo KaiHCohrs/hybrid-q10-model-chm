@@ -5,15 +5,7 @@ import numpy as onp
 import math
 
 from pathlib import Path
-import pandas as pd
 from sklearn.model_selection import train_test_split
-from torch.utils import data
-from jax import grad, vmap, random, jit
-from jax import numpy as jnp
-from functools import partial
-import torch.nn as nn
-import torch
-import random as orandom
 import scipy.stats as stats
 from .preprocessing import prepare_data
 from .generate_data import synthetic_dataset
@@ -22,16 +14,15 @@ data_dir = Path(__file__).parent.parent.parent.joinpath("data")
 
 
 def load_dataset(
-    site='AT-Neu',
-    option="syn",
+    site="AT-Neu",
+    target="syn",
     frac=0.2,
     years=[2003, 2004, 2005, 2006, 2007],
     noise=0.2,
-    seed=33
+    seed=33,
 ):
-
     data = prepare_data(site)
-    if option == "syn":
+    if target == "syn":
         data = synthetic_dataset(data, Q10=1.5)
         data = impose_noise(data, "RECO_syn", noise)
 
@@ -40,7 +31,7 @@ def load_dataset(
 
     # Split into train & test datasets
     if frac > 0:
-        if option == "measured":
+        if target == "measured":
             data["NIGHT"] = 0
             data.loc[(data["SW_IN_POT"] == 0), "NIGHT"] = 1
             data = data[(data["NIGHT"] == 1)]
@@ -54,12 +45,12 @@ def load_dataset(
         test["train_label"] = "Test set"
 
         # Define target and explanatory variables
-        if option == "syn":
+        if target == "syn":
             var_RECO = "RECO_obs"
             var_RECO_GT = "RECO_syn"
             var_temp = "TA"
             EV_label = ["SW_POT_sm", "SW_POT_sm_diff"]
-        elif option == "measured":
+        elif target == "measured":
             var_RECO = "NEE"
             var_RECO_GT = "NEE"
             var_temp = "TA"
@@ -85,10 +76,20 @@ def load_dataset(
 
         EV_train, EV_test = EV_train.values, EV_test.values
         driver_train, driver_test = driver_train.values, driver_test.values
-        out = [EV_train, None, RECO_train, RECO_train_GT, driver_train, EV_test, None, RECO_test, RECO_test_GT, driver_test, RECO_max_abs]
+        out = [
+            EV_train,
+            RECO_train,
+            RECO_train_GT,
+            driver_train,
+            EV_test,
+            RECO_test,
+            RECO_test_GT,
+            driver_test,
+            RECO_max_abs,
+        ]
         return train, test, out
     else:
-        if option == "measured":
+        if target == "measured":
             data["NIGHT"] = 0
             data.loc[(data["SW_IN_POT"] == 0), "NIGHT"] = 1
             data = data[(data["NIGHT"] == 1)]
@@ -99,12 +100,12 @@ def load_dataset(
         train["train_label"] = "Training set"
 
         # Define target and explanatory variables
-        if option == "syn":
+        if target == "syn":
             var_RECO = "RECO_obs"
             var_RECO_GT = "RECO_syn"
             var_temp = "TA"
             EV_label = ["SW_POT_sm", "SW_POT_sm_diff"]
-        elif option == "measured":
+        elif target == "measured":
             var_RECO = "NEE"
             var_RECO_GT = "NEE"
             var_temp = "TA"
@@ -166,29 +167,9 @@ def impose_noise(data, RECO_var, RECOnoise_std=0.3):
         return data
 
     # compute noise
-    noise_RECO = stats.truncnorm(-0.95/RECOnoise_std, 0.95/RECOnoise_std, loc=0, scale=RECOnoise_std).rvs(data[RECO_var].shape)
+    noise_RECO = stats.truncnorm(
+        -0.95 / RECOnoise_std, 0.95 / RECOnoise_std, loc=0, scale=RECOnoise_std
+    ).rvs(data[RECO_var].shape)
     # add RECO noise
-    data.loc[:, 'RECO_obs'] = data[RECO_var] * (1 + noise_RECO)
+    data.loc[:, "RECO_obs"] = data[RECO_var] * (1 + noise_RECO)
     return data
-
-
-def standard_x(x_train, x_test=None):
-    """
-        Function that stanrdizes along all columns of given data and
-        applies the same transformation also to a test set.
-
-    Args:
-        x_train (ndarray): training data
-        x_test (ndarray, optional): test data. Defaults to None.
-
-    Returns:
-        ndarray: standardized training (and if provided test) set
-    """
-    # the mean and std values are only calculated by training set
-    x_mean = x_train.mean(axis=0)
-    x_std = x_train.std(axis=0)
-    x_train1 = ((x_train - x_mean) / x_std).values
-    if x_test is not None:
-        x_test1 = ((x_test - x_mean) / x_std).values
-        return x_train1, x_test1
-    return x_train1
