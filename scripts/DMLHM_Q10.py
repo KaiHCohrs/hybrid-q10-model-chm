@@ -9,43 +9,17 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".70"
 
 import numpy as np
 from src.datasets.loaders import load_dataset
+import pathlib
+from src.utility.experiments import create_experiment_folder
+import pandas as pd
 
 from src.models.DML import (
-    DML,
+    DML
 )
 
-def main(parser: ArgumentParser = None, **kwargs):
-    if parser is None:
-        parser = ArgumentParser()
-    parser.add_argument(
-        "-samples", type=int, default=25600, help="number of samples to train with"
-    )
-    parser.add_argument(
-        "--ml",
-        type=str,
-        choices=("nn", "rf"),
-        default="rf",
-        help="Choice of nuisance estimators",
-    )
-    parser.add_argument("--reg", action="store_true")
-    parser.add_argument("--no-reg", dest="reg", action="store_false")
-    parser.add_argument("--T", action="store_true")
-    parser.add_argument("--no-T", dest="T", action="store_false")
-    parser.add_argument(
-        "--target", dest="target", default="syn", help="syn or measured data"
-    )
-    parser.add_argument("--seed", dest="seed", default=33, help="random seed")
-
-    args = parser.parse_args()
-    for k, v in kwargs.items():
-        setattr(args, k, v)
-
-    print(">>> Starting experiment.")
-    if args.reg:
-        drop_p = 0.2
-    else:
-        drop_p = 0.0
-
+def main(args):
+    ################ Define the experiment  ################
+    # Data
     dataset_config = {
         "site": "AT-Neu",
         "target": args.target,
@@ -70,9 +44,8 @@ def main(parser: ArgumentParser = None, **kwargs):
         dtype=bool,
     )
 
-    orandom.seed(args.seed)
-    rng_keys1 = orandom.sample(range(1000000), 1)
-    rng_keys2 = orandom.sample(range(1000000), 1)
+    # Model
+    drop_p = 0.2 if args.reg else 0.0
 
     if args.ml == "nn":
         trainer_config = {
@@ -112,7 +85,6 @@ def main(parser: ArgumentParser = None, **kwargs):
         "n_folds": 5,
         "n_rep": 1,
     }
-
     # Define final estimator for Rb on the residuals. Potentially include T
     if args.T:
         T = 1
@@ -132,39 +104,87 @@ def main(parser: ArgumentParser = None, **kwargs):
             "split": 1.0,
         },
     }
-    if args.target == "syn":
-        seed = rng_keys1[0]
-        orandom.seed(seed)
-        np.random.seed(seed)
-        bootstrapsample = np.random.choice(
-            np.arange(len(indices))[indices], size=args.samples, replace=False
-        )
-        bootstrapsample.sort()
-    else:
-        bootstrapsample = indices
+    
+    
+    ################ Save the experiment setup  ################    
+    experiment_dict = {'model_config': config, 'data_config': dataset_config}
 
-    X = EV_train[bootstrapsample]
-    T = driver_train[bootstrapsample]
-    y = RECO_train[bootstrapsample]
+    #### Create the experiment folder ####
+    print("Creating the experiment folder...")
+    reg_str = "_reg" if args.reg else ""
+    T_str = "_T" if args.T else ""
+    experiment_path = create_experiment_folder(f"output_DML{reg_str}{T_str}_{args.target}", experiment_dict, path=args.results_folder)
 
-    X_T = np.c_[X, T]
 
-    config["seed"] = rng_keys2
-    inputs = {"T": T, "EV": X}
-    dml = DML(config)
-    dml.fit(inputs, y)
+    orandom.seed(args.seed)
+    Q10s = list()
+    for i in range(100):
+        rng_keys1 = orandom.sample(range(1000000), 1)
+        rng_keys2 = orandom.sample(range(1000000), 1)
+        
+        if args.target == "syn":
+            seed = rng_keys1[0]
+            orandom.seed(seed)
+            np.random.seed(seed)
+            bootstrapsample = np.random.choice(
+                np.arange(len(indices))[indices], size=args.samples, replace=False
+            )
+            bootstrapsample.sort()
+        else:
+            bootstrapsample = indices
 
-    if args.T:
-        X_Rb = X_T
-    else:
-        X_Rb = X
+        X = EV_train[bootstrapsample]
+        T = driver_train[bootstrapsample]
+        y = RECO_train[bootstrapsample]
 
-    inputs = {"T": T, "EV": X, "Rb": X_Rb}
-    dml.init_Rb(config)
 
-    dml.fit_Rb(inputs, y)
-    dml.Q10
+        config["seed"] = rng_keys2
+        inputs = {"T": T, "EV": X}
+        dml = DML(config)
+        dml.fit(inputs, y)
 
+
+        X_Rb = np.c_[X, T] if args.T else X
+
+        inputs = {"T": T, "EV": X, "Rb": X_Rb}
+        dml.init_Rb(config)
+
+        #dml.fit_Rb(inputs, y)
+        Q10s.append(dml.Q10_mean)
+
+        pd.DataFrame(Q10s, columns=['Q10']).to_csv(experiment_path.joinpath("Q10s.csv"))
+        print(f"Finish estimating model {i+1}/100...")
+    
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument(
+        "-samples", type=int, default=3200, help="number of samples to train with"
+    )
+    parser.add_argument(
+        "--ml",
+        type=str,
+        choices=("nn", "rf"),
+        default="rf",
+        help="Choice of nuisance estimators",
+    )
+    parser.add_argument("--reg", action="store_true")
+    parser.add_argument("--no-reg", dest="reg", action="store_false")
+    parser.add_argument("--T", action="store_true")
+    parser.add_argument("--no-T", dest="T", action="store_false")
+    parser.add_argument(
+        "--target", dest="target", default="syn", help="syn or measured data"
+    )
+    parser.add_argument("--seed", dest="seed", default=33, help="random seed")
+    parser.add_argument("--results_folder", type=str, default=None, help="Folder to save results")
+    parser.add_argument("--data_folder", type=str, default=None, help="Folder to load data from")
+
+    args = parser.parse_args()
+    if args.data_folder is None:
+        args.data_folder = pathlib.Path(__file__).parent.parent.joinpath('data')
+    if args.results_folder is None:
+        args.results_folder = pathlib.Path(__file__).parent.parent.joinpath('results')
+
+    print(args.data_folder)
+    print(args.results_folder)
+    main(args)

@@ -14,35 +14,15 @@ from src.models.NN import (
 )
 from src.datasets.utility import BootstrapLoader
 from jax import random
+import pathlib
+from src.utility.experiments import create_experiment_folder
 
 # jax.devices("gpu")[0]
 
 
-def main(parser: ArgumentParser = None, **kwargs):
-    if parser is None:
-        parser = ArgumentParser()
-    parser.add_argument(
-        "-samples", type=int, default=25600, help="number of samples to train with"
-    )
-    parser.add_argument("--reg", action="store_true")
-    parser.add_argument("--no-reg", dest="reg", action="store_false")
-    parser.add_argument("--T", action="store_true")
-    parser.add_argument("--no-T", dest="T", action="store_false")
-    parser.add_argument(
-        "--target", dest="target", default="syn", help="syn or measured data"
-    )
-    parser.add_argument("--seed", dest="seed", default=33, help="random seed")
-
-    args = parser.parse_args()
-    for k, v in kwargs.items():
-        setattr(args, k, v)
-
-    print(">>> Starting experiment.")
-    if args.reg:
-        drop_p = 0.2
-    else:
-        drop_p = 0.0
-
+def main(args):
+    ################ Define the experiment  ################
+    # Data
     dataset_config = {
         "site": "AT-Neu",
         "target": args.target,
@@ -51,6 +31,7 @@ def main(parser: ArgumentParser = None, **kwargs):
         "noise": 0.2,
         "seed": 33,
     }
+    
     train, val, out = load_dataset(**dataset_config)
     (
         EV_train,
@@ -80,21 +61,34 @@ def main(parser: ArgumentParser = None, **kwargs):
     T = driver_train[indices][:, None]
     y = RECO_train[indices][:, None]
 
-    if args.T:
-        X_Rb = np.c_[X, T]
-    else:
-        X_Rb = X
+    X_Rb = np.c_[X, T] if args.T else X
 
     X_val = EV_val[indices_val]
     T_val = driver_val[indices_val][:, None]
     y_val = RECO_val[indices_val][:, None]
 
-    if args.T:
-        X_Rb_val = np.c_[X_val, T_val]
-    else:
-        X_Rb_val = X_val
-
+    X_Rb_val = np.c_[X_val, T_val] if args.T else X_val
     data_val = [X_Rb_val, T_val, y_val]
+
+    drop_p = 0.2 if args.reg else 0.0
+
+    model_config = {
+        "layers": [X_Rb.shape[1], 16, 16, 1],
+        "ensemble_size": 100,
+        "p": drop_p,
+        "weight_decay": 0,
+        "Q10_mean_guess":1.5,
+    }
+
+
+    ################ Save the experiment setup  ################    
+    experiment_dict = {'model_config': model_config, 'data_config': dataset_config}
+
+    #### Create the experiment folder ####
+    print("Creating the experiment folder...")
+    reg_str = "_reg" if args.reg else ""
+    T_str = "_T" if args.T else ""
+    experiment_path = create_experiment_folder(f"output_NN{reg_str}{T_str}_{args.target}", experiment_dict, path=args.results_folder)
 
     results = pd.DataFrame(columns=["Q"])
 
@@ -120,8 +114,32 @@ def main(parser: ArgumentParser = None, **kwargs):
     regressor.fit(dataset, data_val, nIter=10000, rng_key=rng_key3)
 
     sample, Rb_pred, Q10 = regressor.posterior(X_Rb, T)
-    results["Q"] = Q10[:, 0]
+    results["Q10"] = Q10[:, 0]    
+    results.to_csv(experiment_path.joinpath("Q10s.csv"))
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument(
+        "-samples", type=int, default=25600, help="number of samples to train with"
+    )
+    parser.add_argument("--reg", action="store_true")
+    parser.add_argument("--no-reg", dest="reg", action="store_false")
+    parser.add_argument("--T", action="store_true")
+    parser.add_argument("--no-T", dest="T", action="store_false")
+    parser.add_argument(
+        "--target", dest="target", default="syn", help="syn or measured data"
+    )
+    parser.add_argument("--seed", dest="seed", default=33, help="random seed")
+    parser.add_argument("--results_folder", type=str, default=None, help="Folder to save results")
+    parser.add_argument("--data_folder", type=str, default=None, help="Folder to load data from")
+
+    args = parser.parse_args()
+    if args.data_folder is None:
+        args.data_folder = pathlib.Path(__file__).parent.parent.joinpath('data')
+    if args.results_folder is None:
+        args.results_folder = pathlib.Path(__file__).parent.parent.joinpath('results')
+
+    print(args.data_folder)
+    print(args.results_folder)
+    main(args)
