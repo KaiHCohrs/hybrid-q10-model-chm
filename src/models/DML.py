@@ -12,13 +12,9 @@ from sklearn.ensemble import (
     StackingRegressor,
 )
 from src.models.NN_regressor import EnsembleCustomJNN
-
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".50"
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
-
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false
 class DML:
     def __init__(self, config):
         # Define the learners:
@@ -66,8 +62,6 @@ class DML:
         X["EV"] = (X["EV"] - X["EV"].mean(axis=0)) / X["EV"].std(0)
 
         # from seed generate twice the amount of seeds according to the split
-        # print(self.seed)
-        # orandom.seed(self.seed)
         ml_l_seeds = orandom.sample(range(10000), self.dml_config["n_folds"])
         ml_m_seeds = orandom.sample(range(10000), self.dml_config["n_folds"])
 
@@ -149,8 +143,6 @@ class DML:
         self.Rb = Rb
 
     def nuisance_score(self, X, y):
-        # inputs need to be unnormalized
-
         # Requires to apply log transform first
         y_log = np.log(y)
 
@@ -159,8 +151,6 @@ class DML:
 
         # Normalize the input
         X["EV"] = (X["EV"] - self.means) / self.std
-        # y_pred = np.mean([ml_l.predict(X['EV']) for ml_l in self.dml_plr_obj._models['ml_l']['d'][0]], axis=0)
-        # d_pred = np.mean([ml_m.predict(X['EV']) for ml_m in self.dml_plr_obj._models['ml_m']['d'][0]], axis=0)
         ml_l_score = np.sqrt(
             np.mean(
                 [

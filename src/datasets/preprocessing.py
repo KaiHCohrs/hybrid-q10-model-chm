@@ -145,7 +145,7 @@ def wdefcum(data):
         # TODO: Figure out the meaning of the magic number here.
         ET = LE / 2.45e6 * 1800
         CWD = np.zeros(n)
-        CWD[1:] = np.NaN
+        CWD[1:] = np.nan
 
         for i in range(1, n):
             CWD[i] = np.minimum(CWD[i - 1] + P[i - 1] - ET[i - 1], 0)

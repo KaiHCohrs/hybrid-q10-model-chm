@@ -15,9 +15,9 @@ import optax
 from .building_blocks import MLPDropout  # , RespirationModel
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".50"
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 class Q10Regressor:
@@ -57,26 +57,22 @@ class Q10Regressor:
         )
 
         self.optimizer = optax.chain(
-            # optax.clip(1.0),
             optax.adamw(
                 learning_rate=schedule,
                 weight_decay=weight_decay,
             ),
         )
         self.opt_state = vmap(self.optimizer.init)(self.params)
-        # self.key_opt_state = vmap(self.optimizer.init)(keys_3)
 
         schedule_Q10 = optax.exponential_decay(
             init_value=0.1, transition_steps=500, decay_rate=0.95
         )
 
         self.optimizer_Q10 = optax.chain(
-            # optax.clip(1.0),
             optax.adamw(learning_rate=schedule_Q10, weight_decay=0)
         )
 
         self.opt_state_Q10 = vmap(self.optimizer_Q10.init)(self.Q10)
-        # self.key_opt_state_Q10 = vmap(self.optimizer_Q10)(keys_4)
 
         # Logger
         self.itercount = itertools.count()
@@ -94,7 +90,6 @@ class Q10Regressor:
 
     # Define the forward pass
     def net_forward(self, params, Q10, inputs, T, p, rng_key):
-        # params_nn, Q10 = params[:-1], params[-1]
         Rb = jax.nn.softplus(self.apply(params, inputs, p, rng_key))
         Y_pred = Rb * Q10 ** (0.1 * (T - 15))
         return Y_pred
@@ -184,10 +179,7 @@ class Q10Regressor:
         v_early_stopping = vmap(self.early_stopping, in_axes=(0, 0, 0, 0, 0))
         v_batch_normalize = vmap(self.batch_normalize, in_axes=(None, 0))
 
-        # data_train, data_val, data_test = data_val
-        # data_train = v_batch_normalize(data_train, dataset.norm_const)
         data_val = v_batch_normalize(data_val, dataset.norm_const)
-        # data_test = v_batch_normalize(data_test, dataset.norm_const)
 
         # Main training loop
         for it in pbar:
@@ -199,7 +191,6 @@ class Q10Regressor:
                 self.Q10,
                 self.opt_state,
                 self.opt_state_Q10,
-                # self.key_opt_state, self.key_opt_state_Q10,
                 batch,
                 self.p,
                 jnp.array(rng_keys),
@@ -216,12 +207,8 @@ class Q10Regressor:
                 update = jnp.array(self.loss_test_log).min(axis=0) > loss_test_value
                 self.loss_test_log.append(loss_test_value)
 
-                # loss_train_value = v_monitor_loss_test(self.params, self.Q10, data_train)
-                # self.train_log.append(loss_train_value)
                 loss_val_value = v_monitor_loss_test(self.params, self.Q10, data_val)
                 self.val_log.append(loss_val_value)
-                # loss_test_value = v_monitor_loss_test(self.params, self.Q10, data_test)
-                # self.test_log.append(loss_test_value)
 
                 pbar.set_postfix(
                     {
@@ -244,8 +231,6 @@ class Q10Regressor:
         t = jnp.tile(t[jnp.newaxis, :, :], (self.ensemble_size, 1, 1))
         inputs = normalize(x, self.mu_X, self.sigma_X)
 
-        # params = vmap(self.get_params)(self.opt_state)
-        # Q10 = vmap(self.get_params_Q10)(self.opt_state_Q10)
         samples, samples_Rb, samples_Q10 = vmap(self.net_forward_test, (0, 0, 0, 0))(
             self.params_best, self.Q10_best, inputs, t
         )

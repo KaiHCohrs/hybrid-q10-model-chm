@@ -16,13 +16,10 @@ from src.datasets.utility import (
     CustomBootstrapLoader,
 )
 
-from .building_blocks import MLPDropout  # , RespirationModel
-
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
+from .building_blocks import MLPDropout
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".50"
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 class EnsembleCustomJNN(BaseEstimator, RegressorMixin):
     def __init__(self, model_config, trainer_config, seed=1):
@@ -130,7 +127,6 @@ class EnsembleCustomJNN(BaseEstimator, RegressorMixin):
             init_value=0.01, transition_steps=500, decay_rate=0.95
         )
         self.optimizer = optax.chain(
-            # optax.clip(1.0),
             optax.adamw(
                 learning_rate=schedule,
                 weight_decay=self.weight_decay,
@@ -180,7 +176,6 @@ class EnsembleCustomJNN(BaseEstimator, RegressorMixin):
                 )
                 self.loss_log.append(loss_value)
 
-                # Do we need to normalize?
                 loss_test_value = v_monitor_loss_test(self.params, data_val)
                 update = jnp.array(self.loss_test_log).min(axis=0) > loss_test_value
                 self.loss_test_log.append(loss_test_value)

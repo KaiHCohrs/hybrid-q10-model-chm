@@ -4,8 +4,8 @@ import pandas as pd
 
 # os.environ["TF_CPP_MIN_LOG_LEVEL"]="0"
 # os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".70"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 0 1 7
+#os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".70"
 
 import numpy as np
 from src.datasets.loaders import load_dataset
@@ -16,9 +16,6 @@ from src.datasets.utility import BootstrapLoader
 from jax import random
 import pathlib
 from src.utility.experiments import create_experiment_folder
-
-# jax.devices("gpu")[0]
-
 
 def main(args):
     ################ Define the experiment  ################

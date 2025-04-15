@@ -1,4 +1,4 @@
-from jax import grad, vmap, random, jit
+from jax import random
 from jax import numpy as jnp
 import jax
 

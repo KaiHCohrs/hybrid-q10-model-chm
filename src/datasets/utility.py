@@ -1,7 +1,7 @@
 import numpy as onp
 
 from torch.utils import data
-from jax import grad, vmap, random, jit
+from jax import vmap, random, jit
 from jax import numpy as jnp
 from functools import partial
 import torch
